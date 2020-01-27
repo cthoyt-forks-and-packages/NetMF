@@ -15,6 +15,16 @@ Wikipedia [Source](http://www.mattmahoney.net/dc/textdata) [Preprocessed](http:/
 
 [Flickr](http://leitang.net/code/social-dimension/data/flickr.mat)
 
+## Usage
+
+This is a minimal example to use the code via the command line to train on the PPI network.
+
+```bash
+$ wget http://snap.stanford.edu/node2vec/Homo_sapiens.mat
+$ netmf-train --input Homo_sapiens.mat --output homo_sapiens_embeddings.txt
+$ netmf-predict --label Homo_sapiens.mat --embedding homo_sapiens_embeddings.txt.npy --seed 5
+```
+
 ## Cite
 
 Please cite our paper if you use this code in your own work:
