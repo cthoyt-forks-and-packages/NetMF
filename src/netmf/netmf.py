@@ -122,7 +122,7 @@ def netmf_small(args):
     logger.info("Save embedding to %s", args.output)
     np.save(args.output, deepwalk_embedding, allow_pickle=False)
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, required=True,
             help=".mat input file path")
@@ -155,3 +155,6 @@ if __name__ == "__main__":
     else:
         netmf_small(args)
 
+
+if __name__ == "__main__":
+    main()

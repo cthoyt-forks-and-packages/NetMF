@@ -88,7 +88,7 @@ def predict_cv(X, y, train_ratio=0.2, n_splits=10, random_state=0, C=1.):
             np.mean(macro) * 100)
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--label", type=str, required=True,
             help="input file path for labels (.mat)")
@@ -136,3 +136,6 @@ if __name__ == "__main__":
         predict_cv(embedding, label, train_ratio=tr/100.,
                 n_splits=args.num_split, C=args.C, random_state=args.seed)
 
+
+if __name__ == "__main__":
+    main()
