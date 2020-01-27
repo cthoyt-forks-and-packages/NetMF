@@ -64,27 +64,27 @@ def svd_deepwalk_matrix(X, dim):
     return sparse.diags(np.sqrt(s)).dot(u.T).T
 
 
-def netmf_large(args):
+def netmf_large(*, window, matfile_variable_name, rank, negative, dim, output):
     logger.info("Running NetMF for a large window size...")
-    logger.info("Window size is set to be %d", args.window)
+    logger.info("Window size is set to be %d", window)
     # load adjacency matrix
-    A = load_adjacency_matrix(args.input,
-            variable_name=args.matfile_variable_name)
+    A = load_adjacency_matrix(input,
+            variable_name=matfile_variable_name)
     vol = float(A.sum())
     # perform eigen-decomposition of D^{-1/2} A D^{-1/2}
     # keep top #rank eigenpairs
-    evals, D_rt_invU = approximate_normalized_graph_laplacian(A, rank=args.rank, which="LA")
+    evals, D_rt_invU = approximate_normalized_graph_laplacian(A, rank=rank, which="LA")
 
     # approximate deepwalk matrix
     deepwalk_matrix = approximate_deepwalk_matrix(evals, D_rt_invU,
-            window=args.window,
-            vol=vol, b=args.negative)
+            window=window,
+            vol=vol, b=negative)
 
     # factorize deepwalk matrix with SVD
-    deepwalk_embedding = svd_deepwalk_matrix(deepwalk_matrix, dim=args.dim)
+    deepwalk_embedding = svd_deepwalk_matrix(deepwalk_matrix, dim=dim)
 
-    logger.info("Save embedding to %s", args.output)
-    np.save(args.output, deepwalk_embedding, allow_pickle=False)
+    logger.info("Save embedding to %s", output)
+    np.save(output, deepwalk_embedding, allow_pickle=False)
 
 
 def direct_compute_deepwalk_matrix(A, window, b):
@@ -107,20 +107,20 @@ def direct_compute_deepwalk_matrix(A, window, b):
     Y = f(M.todense().astype(theano.config.floatX))
     return sparse.csr_matrix(Y)
 
-def netmf_small(args):
+def netmf_small(*, window, matfile_variable_name, negative, dim, output):
     logger.info("Running NetMF for a small window size...")
-    logger.info("Window size is set to be %d", args.window)
+    logger.info("Window size is set to be %d", window)
     # load adjacency matrix
-    A = load_adjacency_matrix(args.input,
-            variable_name=args.matfile_variable_name)
+    A = load_adjacency_matrix(input,
+            variable_name=matfile_variable_name)
     # directly compute deepwalk matrix
     deepwalk_matrix = direct_compute_deepwalk_matrix(A,
-            window=args.window, b=args.negative)
+            window=window, b=negative)
 
     # factorize deepwalk matrix with SVD
-    deepwalk_embedding = svd_deepwalk_matrix(deepwalk_matrix, dim=args.dim)
-    logger.info("Save embedding to %s", args.output)
-    np.save(args.output, deepwalk_embedding, allow_pickle=False)
+    deepwalk_embedding = svd_deepwalk_matrix(deepwalk_matrix, dim=dim)
+    logger.info("Save embedding to %s", output)
+    np.save(output, deepwalk_embedding, allow_pickle=False)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -151,9 +151,22 @@ def main():
             format='%(asctime)s %(message)s') # include timestamp
 
     if args.large:
-        netmf_large(args)
+        netmf_large(
+            window=args.window,
+            matfile_variable_name=args.matfile_variable_name,
+            negative=args.negative,
+            dim=args.dim,
+            output=args.dim,
+            rank=args.rank,
+        )
     else:
-        netmf_small(args)
+        netmf_small(
+            window=args.window,
+            matfile_variable_name=args.matfile_variable_name,
+            negative=args.negative,
+            dim=args.dim,
+            output=args.dim,
+        )
 
 
 if __name__ == "__main__":

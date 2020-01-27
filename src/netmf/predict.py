@@ -88,6 +88,32 @@ def predict_cv(X, y, train_ratio=0.2, n_splits=10, random_state=0, C=1.):
             np.mean(macro) * 100)
 
 
+def _help_main(*, label, matfile_variable_name, embedding, start_train_ratio, stop_train_ratio, num_train_ratio,
+               num_split, C, seed):
+    logger.info("Loading label from %s...", label)
+    label = load_label(file=label, variable_name=matfile_variable_name)
+    logger.info("Label loaded!")
+
+    logger.info("Loading network embedding from %s...", embedding)
+    ext = os.path.splitext(embedding)[1]
+    if ext == ".npy":
+        embedding = np.load(embedding)
+    elif ext == ".pkl":
+        with open(embedding, "rb") as f:
+            embedding = pkl.load(f)
+    else:
+        # Load word2vec format
+        embedding = load_w2v_feature(embedding)
+    logger.info("Network embedding loaded!")
+
+    train_ratios = np.linspace(start_train_ratio, stop_train_ratio,
+                               num_train_ratio)
+
+    for tr in train_ratios:
+        predict_cv(embedding, label, train_ratio=tr / 100.,
+                   n_splits=num_split, C=C, random_state=seed)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--label", type=str, required=True,
@@ -113,28 +139,17 @@ def main():
             #filename="%s.log" % args.embedding, filemode="w", # uncomment this to log to file
             level=logging.INFO,
             format='%(asctime)s %(message)s') # include timestamp
-    logger.info("Loading label from %s...", args.label)
-    label = load_label(file=args.label, variable_name=args.matfile_variable_name)
-    logger.info("Label loaded!")
-
-    logger.info("Loading network embedding from %s...", args.embedding)
-    ext = os.path.splitext(args.embedding)[1]
-    if ext == ".npy":
-        embedding = np.load(args.embedding)
-    elif ext == ".pkl":
-        with open(args.embedding, "rb") as f:
-            embedding = pkl.load(f)
-    else:
-        # Load word2vec format
-        embedding = load_w2v_feature(args.embedding)
-    logger.info("Network embedding loaded!")
-
-    train_ratios = np.linspace(args.start_train_ratio, args.stop_train_ratio,
-            args.num_train_ratio)
-
-    for tr in train_ratios:
-        predict_cv(embedding, label, train_ratio=tr/100.,
-                n_splits=args.num_split, C=args.C, random_state=args.seed)
+    _help_main(
+        label=args.label,
+        matfile_variable_name=args.matfile_variable_name,
+        embedding=args.embedding,
+        start_train_ratio=args.start_train_ratio,
+        stop_train_ratio=args.stop_train_ratio,
+        num_train_ratio=args.num_train_ratio,
+        num_split=args.num_split,
+        C=args.C,
+        seed=args.seed,
+    )
 
 
 if __name__ == "__main__":
