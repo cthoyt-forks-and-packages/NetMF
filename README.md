@@ -15,6 +15,24 @@ Wikipedia [Source](http://www.mattmahoney.net/dc/textdata) [Preprocessed](http:/
 
 [Flickr](http://leitang.net/code/social-dimension/data/flickr.mat)
 
+## Installation
+
+The latest version of NetMF can be downloaded and installed from
+[GitHub](https://github.com/xptree/NetMF) on Python 3.5+ with:
+
+```bash
+$ pip install git+https://github.com/xptree/NetMF.git
+```
+
+For developers, NetMF can be installed from the source code in
+in development mode with:
+
+```bash
+$ git clone https://github.com/xptree/NetMF.git
+$ cd NetMF
+$ pip install -e .
+```
+
 ## Usage
 
 This is a minimal example to use the code via the command line to train on the PPI network.
