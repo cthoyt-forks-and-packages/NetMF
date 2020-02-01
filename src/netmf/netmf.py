@@ -5,17 +5,20 @@
 # Create Time: 2017/07/13 16:05
 # TODO:
 
-import scipy.io
-import scipy.sparse as sparse
-from scipy.sparse import csgraph
-import numpy as np
 import argparse
 import logging
+from typing import Optional
+
+import numpy as np
+import scipy.io
+import scipy.sparse as sparse
+import scipy.sparse.linalg
 import theano
+from scipy.sparse import csgraph
 from theano import tensor as T
 
 logger = logging.getLogger(__name__)
-theano.config.exception_verbosity='high'
+theano.config.exception_verbosity = 'high'
 
 
 def load_adjacency_matrix(file, variable_name="network"):
@@ -23,14 +26,15 @@ def load_adjacency_matrix(file, variable_name="network"):
     logger.info("loading mat file %s", file)
     return data[variable_name]
 
+
 def deepwalk_filter(evals, window):
     for i in range(len(evals)):
         x = evals[i]
-        evals[i] = 1. if x >= 1 else x*(1-x**window) / (1-x) / window
+        evals[i] = 1. if x >= 1 else x * (1 - x ** window) / (1 - x) / window
     evals = np.maximum(evals, 0)
-    logger.info("After filtering, max eigenvalue=%f, min eigenvalue=%f",
-            np.max(evals), np.min(evals))
+    logger.info("After filtering, eigenvalues in [%.3f, %.3f]", np.min(evals), np.max(evals))
     return evals
+
 
 def approximate_normalized_graph_laplacian(A, rank, which="LA"):
     n = A.shape[0]
@@ -38,25 +42,25 @@ def approximate_normalized_graph_laplacian(A, rank, which="LA"):
     # X = D^{-1/2} W D^{-1/2}
     X = sparse.identity(n) - L
     logger.info("Eigen decomposition...")
-    #evals, evecs = sparse.linalg.eigsh(X, rank,
-    #        which=which, tol=1e-3, maxiter=300)
+    # evals, evecs = sparse.linalg.eigsh(X, rank, which=which, tol=1e-3, maxiter=300)
     evals, evecs = sparse.linalg.eigsh(X, rank, which=which)
-    logger.info("Maximum eigenvalue %f, minimum eigenvalue %f", np.max(evals), np.min(evals))
+    logger.info("Eigenvalues in [%.3f, %.3f]", np.min(evals), np.max(evals))
     logger.info("Computing D^{-1/2}U..")
     D_rt_inv = sparse.diags(d_rt ** -1)
     D_rt_invU = D_rt_inv.dot(evecs)
     return evals, D_rt_invU
 
+
 def approximate_deepwalk_matrix(evals, D_rt_invU, window, vol, b):
     evals = deepwalk_filter(evals, window=window)
     X = sparse.diags(np.sqrt(evals)).dot(D_rt_invU.T).T
     m = T.matrix()
-    mmT = T.dot(m, m.T) * (vol/b)
+    mmT = T.dot(m, m.T) * (vol / b)
     f = theano.function([m], T.log(T.maximum(mmT, 1)))
     Y = f(X.astype(theano.config.floatX))
-    logger.info("Computed DeepWalk matrix with %d non-zero elements",
-            np.count_nonzero(Y))
+    logger.info("Computed DeepWalk matrix with %d non-zero elements", np.count_nonzero(Y))
     return sparse.csr_matrix(Y)
+
 
 def svd_deepwalk_matrix(X, dim):
     u, s, v = sparse.linalg.svds(X, dim, return_singular_vectors="u")
@@ -64,27 +68,36 @@ def svd_deepwalk_matrix(X, dim):
     return sparse.diags(np.sqrt(s)).dot(u.T).T
 
 
-def netmf_large(*, window, matfile_variable_name, rank, negative, dim, output):
+def netmf_large(
+    *,
+    matfile,
+    window: int = 10,
+    matfile_variable_name: str = 'network',
+    rank: int = 256,
+    negative: float = 1.0,
+    dim: int = 128,
+    output: Optional[str] = None,
+):
     logger.info("Running NetMF for a large window size...")
     logger.info("Window size is set to be %d", window)
     # load adjacency matrix
-    A = load_adjacency_matrix(input,
-            variable_name=matfile_variable_name)
+    A = load_adjacency_matrix(matfile, variable_name=matfile_variable_name)
     vol = float(A.sum())
     # perform eigen-decomposition of D^{-1/2} A D^{-1/2}
     # keep top #rank eigenpairs
     evals, D_rt_invU = approximate_normalized_graph_laplacian(A, rank=rank, which="LA")
 
     # approximate deepwalk matrix
-    deepwalk_matrix = approximate_deepwalk_matrix(evals, D_rt_invU,
-            window=window,
-            vol=vol, b=negative)
+    deepwalk_matrix = approximate_deepwalk_matrix(evals, D_rt_invU, window=window, vol=vol, b=negative)
 
     # factorize deepwalk matrix with SVD
     deepwalk_embedding = svd_deepwalk_matrix(deepwalk_matrix, dim=dim)
 
-    logger.info("Save embedding to %s", output)
-    np.save(output, deepwalk_embedding, allow_pickle=False)
+    if output is not None:
+        logger.info("Save embedding to %s", output)
+        np.save(output, deepwalk_embedding, allow_pickle=False)
+
+    return deepwalk_embedding
 
 
 def direct_compute_deepwalk_matrix(A, window, b):
@@ -96,7 +109,7 @@ def direct_compute_deepwalk_matrix(A, window, b):
     S = np.zeros_like(X)
     X_power = sparse.identity(n)
     for i in range(window):
-        logger.info("Compute matrix %d-th power", i+1)
+        logger.info("Compute matrix %d-th power", i + 1)
         X_power = X_power.dot(X)
         S += X_power
     S *= vol / window / b
@@ -107,65 +120,64 @@ def direct_compute_deepwalk_matrix(A, window, b):
     Y = f(M.todense().astype(theano.config.floatX))
     return sparse.csr_matrix(Y)
 
-def netmf_small(*, window, matfile_variable_name, negative, dim, output):
+
+def netmf_small(*, matfile, window, matfile_variable_name, negative, dim, output):
     logger.info("Running NetMF for a small window size...")
     logger.info("Window size is set to be %d", window)
     # load adjacency matrix
-    A = load_adjacency_matrix(input,
-            variable_name=matfile_variable_name)
+    A = load_adjacency_matrix(matfile, variable_name=matfile_variable_name)
     # directly compute deepwalk matrix
-    deepwalk_matrix = direct_compute_deepwalk_matrix(A,
-            window=window, b=negative)
+    deepwalk_matrix = direct_compute_deepwalk_matrix(A, window=window, b=negative)
 
     # factorize deepwalk matrix with SVD
     deepwalk_embedding = svd_deepwalk_matrix(deepwalk_matrix, dim=dim)
     logger.info("Save embedding to %s", output)
     np.save(output, deepwalk_embedding, allow_pickle=False)
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, required=True,
-            help=".mat input file path")
+                        help=".mat input file path")
     parser.add_argument('--matfile-variable-name', default='network',
-            help='variable name of adjacency matrix inside a .mat file.')
+                        help='variable name of adjacency matrix inside a .mat file.')
     parser.add_argument("--output", type=str, required=True,
-            help="embedding output file path")
-
+                        help="embedding output file path")
     parser.add_argument("--rank", default=256, type=int,
-            help="#eigenpairs used to approximate normalized graph laplacian.")
+                        help="#eigenpairs used to approximate normalized graph laplacian.")
     parser.add_argument("--dim", default=128, type=int,
-            help="dimension of embedding")
+                        help="dimension of embedding")
     parser.add_argument("--window", default=10,
-            type=int, help="context window size")
+                        type=int, help="context window size")
     parser.add_argument("--negative", default=1.0, type=float,
-            help="negative sampling")
-
+                        help="negative sampling")
     parser.add_argument('--large', dest="large", action="store_true",
-            help="using netmf for large window size")
+                        help="using netmf for large window size")
     parser.add_argument('--small', dest="large", action="store_false",
-            help="using netmf for small window size")
+                        help="using netmf for small window size")
     parser.set_defaults(large=True)
 
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO,
-            format='%(asctime)s %(message)s') # include timestamp
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')  # include timestamp
 
     if args.large:
         netmf_large(
+            matfile=args.input,
             window=args.window,
             matfile_variable_name=args.matfile_variable_name,
             negative=args.negative,
             dim=args.dim,
-            output=args.dim,
+            output=args.output,
             rank=args.rank,
         )
     else:
         netmf_small(
+            matfile=args.input,
             window=args.window,
             matfile_variable_name=args.matfile_variable_name,
             negative=args.negative,
             dim=args.dim,
-            output=args.dim,
+            output=args.output,
         )
 
 

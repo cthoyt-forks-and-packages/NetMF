@@ -6,23 +6,30 @@ This is a Python implementation of NetMF for the task of network embedding learn
 
 ## Data Sets
 
+- BlogCatalog [Source](http://socialcomputing.asu.edu/datasets/BlogCatalog3) [Preprocessed](http://leitang.net/code/social-dimension/data/blogcatalog.mat)
+- Protein-Protein Interaction [Source](http://thebiogrid.org/download.php) [Preprocessed](http://snap.stanford.edu/node2vec/Homo_sapiens.mat)
+- Wikipedia [Source](http://www.mattmahoney.net/dc/textdata) [Preprocessed](http://snap.stanford.edu/node2vec/POS.mat)
+- [Flickr](http://leitang.net/code/social-dimension/data/flickr.mat)
 
-BlogCatalog [Source](http://socialcomputing.asu.edu/datasets/BlogCatalog3) [Preprocessed](http://leitang.net/code/social-dimension/data/blogcatalog.mat)
+## Programmatic Usage
 
-Protein-Protein Interaction [Source](http://thebiogrid.org/download.php) [Preprocessed](http://snap.stanford.edu/node2vec/Homo_sapiens.mat)
+```python
+from netmf import netmf_large, predict_cv, load_label
 
-Wikipedia [Source](http://www.mattmahoney.net/dc/textdata) [Preprocessed](http://snap.stanford.edu/node2vec/POS.mat)
+# Assuming .mat file is set up in the standard way
+embedding = netmf_large(matfile='Homo_sapiens.mat')
+label = load_label(matfile='Homo_sapiens.mat')
+results = predict_cv(x=embedding, y=label)
+```
 
-[Flickr](http://leitang.net/code/social-dimension/data/flickr.mat)
-
-## Usage
+## CLI Usage
 
 This is a minimal example to use the code via the command line to train on the PPI network.
 
 ```bash
 $ wget http://snap.stanford.edu/node2vec/Homo_sapiens.mat
-$ netmf-train --input Homo_sapiens.mat --output homo_sapiens_embeddings.txt
-$ netmf-predict --label Homo_sapiens.mat --embedding homo_sapiens_embeddings.txt.npy --seed 5
+$ netmf-train --input Homo_sapiens.mat --output homo_sapiens_embeddings.npy
+$ netmf-predict --label Homo_sapiens.mat --embedding homo_sapiens_embeddings.npy
 ```
 
 ## Cite
