@@ -9,6 +9,7 @@ import argparse
 import logging
 from typing import Optional
 
+import networkx as nx
 import numpy as np
 import scipy.io
 import scipy.sparse as sparse
@@ -36,12 +37,13 @@ def deepwalk_filter(evals, window):
     return evals
 
 
-def approximate_normalized_graph_laplacian(A, rank, which="LA"):
-    n = A.shape[0]
-    L, d_rt = csgraph.laplacian(A, normed=True, return_diag=True)
+def approximate_normalized_graph_laplacian(adjacency_matrix, rank, which="LA"):
+    n = adjacency_matrix.shape[0]
+    logger.info("Computing Laplacian")
+    L, d_rt = csgraph.laplacian(adjacency_matrix, normed=True, return_diag=True)
     # X = D^{-1/2} W D^{-1/2}
     X = sparse.identity(n) - L
-    logger.info("Eigen decomposition...")
+    logger.info("Eigen decomposition")
     # evals, evecs = sparse.linalg.eigsh(X, rank, which=which, tol=1e-3, maxiter=300)
     evals, evecs = sparse.linalg.eigsh(X, rank, which=which)
     logger.info("Eigenvalues in [%.3f, %.3f]", np.min(evals), np.max(evals))
@@ -69,25 +71,20 @@ def svd_deepwalk_matrix(X, dim):
 
 
 def netmf_large(
+    adjacency_matrix,
     *,
-    matfile,
     window: int = 10,
-    matfile_variable_name: str = 'network',
     rank: int = 256,
     negative: float = 1.0,
     dim: int = 128,
     output: Optional[str] = None,
 ):
-    logger.info("Running NetMF for a large window size...")
-    logger.info("Window size is set to be %d", window)
-    # load adjacency matrix
-    A = load_adjacency_matrix(matfile, variable_name=matfile_variable_name)
-    vol = float(A.sum())
     # perform eigen-decomposition of D^{-1/2} A D^{-1/2}
     # keep top #rank eigenpairs
-    evals, D_rt_invU = approximate_normalized_graph_laplacian(A, rank=rank, which="LA")
+    evals, D_rt_invU = approximate_normalized_graph_laplacian(adjacency_matrix, rank=rank, which="LA")
 
-    # approximate deepwalk matrix
+    logger.info("Approximating DeepWalk matrix with window size of %d", window)
+    vol = float(adjacency_matrix.sum())
     deepwalk_matrix = approximate_deepwalk_matrix(evals, D_rt_invU, window=window, vol=vol, b=negative)
 
     # factorize deepwalk matrix with SVD
@@ -98,6 +95,17 @@ def netmf_large(
         np.save(output, deepwalk_embedding, allow_pickle=False)
 
     return deepwalk_embedding
+
+
+def netmf_large_mat(matfile, *, matfile_variable_name: str = 'network', **kwargs):
+    adjacency_matrix = load_adjacency_matrix(matfile, variable_name=matfile_variable_name)
+    return netmf_large(adjacency_matrix, **kwargs)
+
+
+def netmf_large_nx(graph: nx.Graph, **kwargs):
+    logger.info('Computing adjacency matrix from NetworkX graph')
+    adjacency_matrix = nx.to_numpy_matrix(graph)
+    return netmf_large(adjacency_matrix, **kwargs)
 
 
 def direct_compute_deepwalk_matrix(A, window, b):
@@ -121,18 +129,23 @@ def direct_compute_deepwalk_matrix(A, window, b):
     return sparse.csr_matrix(Y)
 
 
-def netmf_small(*, matfile, window, matfile_variable_name, negative, dim, output):
-    logger.info("Running NetMF for a small window size...")
-    logger.info("Window size is set to be %d", window)
-    # load adjacency matrix
-    A = load_adjacency_matrix(matfile, variable_name=matfile_variable_name)
-    # directly compute deepwalk matrix
-    deepwalk_matrix = direct_compute_deepwalk_matrix(A, window=window, b=negative)
+def netmf_small_mat(*, matfile, matfile_variable_name: str = 'network', **kwargs):
+    adjacency_matrix = load_adjacency_matrix(matfile, variable_name=matfile_variable_name)
+    return netmf_small(adjacency_matrix, **kwargs)
+
+
+def netmf_small(adjacency_matrix, *, window, negative, dim, output: Optional[str] = None):
+    logger.info("Directly compute DeepWalk matrix with window size of %d", window)
+    deepwalk_matrix = direct_compute_deepwalk_matrix(adjacency_matrix, window=window, b=negative)
 
     # factorize deepwalk matrix with SVD
     deepwalk_embedding = svd_deepwalk_matrix(deepwalk_matrix, dim=dim)
-    logger.info("Save embedding to %s", output)
-    np.save(output, deepwalk_embedding, allow_pickle=False)
+
+    if output is not None:
+        logger.info("Save embedding to %s", output)
+        np.save(output, deepwalk_embedding, allow_pickle=False)
+
+    return deepwalk_embedding
 
 
 def main():
@@ -161,20 +174,20 @@ def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')  # include timestamp
 
     if args.large:
-        netmf_large(
+        netmf_large_mat(
             matfile=args.input,
-            window=args.window,
             matfile_variable_name=args.matfile_variable_name,
+            window=args.window,
             negative=args.negative,
             dim=args.dim,
             output=args.output,
             rank=args.rank,
         )
     else:
-        netmf_small(
+        netmf_small_mat(
             matfile=args.input,
-            window=args.window,
             matfile_variable_name=args.matfile_variable_name,
+            window=args.window,
             negative=args.negative,
             dim=args.dim,
             output=args.output,

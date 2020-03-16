@@ -37,15 +37,15 @@ def construct_indicator(y_score, y):
     return y_pred
 
 
-def load_w2v_feature(file):
-    with open(file, "rb") as f:
+def load_w2v_feature(file: str):
+    with open(file, "rb") as file:
         nu = 0
-        for line in f:
+        for line in file:
             content = line.strip().split()
             nu += 1
             if nu == 1:
                 n, d = int(content[0]), int(content[1])
-                feature = [[] for i in range(n)]
+                feature = [[] for _ in range(n)]
                 continue
             index = int(content[0])
             for x in content[1:]:
@@ -55,13 +55,36 @@ def load_w2v_feature(file):
     return np.array(feature, dtype=np.float32)
 
 
-def load_label(matfile, variable_name="group"):
+def load_label(matfile, variable_name: str = "group"):
     data = scipy.io.loadmat(matfile)
     logger.info("loading mat file %s", matfile)
     label = data[variable_name].todense().astype(np.int)
     label = np.array(label)
-    logger.info('%s, %s %s %s', label.shape, type(label), label.min(), label.max())
+    logger.info('%s, %s %s %s', label.shape, type(label), np.min(label), np.max(label))
     return label
+
+
+def predict(x_train, x_test, y_train, y_test, c):
+    clf = OneVsRestClassifier(
+        LogisticRegression(
+            C=c,
+            solver="liblinear",
+            multi_class="ovr",
+        ),
+        n_jobs=-1,
+    )
+    clf.fit(x_train, y_train)
+    y_score = clf.predict_proba(x_test)
+    y_pred = construct_indicator(y_score, y_test)
+    micro_f1 = f1_score(y_test, y_pred, average="micro")
+    macro_f1 = f1_score(y_test, y_pred, average="macro")
+    try:
+        roc_auc = roc_auc_score(y_test, y_score)
+    except ValueError:
+        logger.warning('Problem with roc_auc_score')
+        return
+
+    return micro_f1, macro_f1, roc_auc
 
 
 def predict_cv(x, y, train_ratio=0.20, splits=10, c=1.0, seed: Optional[int] = None):
@@ -73,33 +96,20 @@ def predict_cv(x, y, train_ratio=0.20, splits=10, c=1.0, seed: Optional[int] = N
         assert len(train_index) + len(test_index) == x.shape[0]
         x_train, x_test = x[train_index], x[test_index]
         y_train, y_test = y[train_index], y[test_index]
-        clf = OneVsRestClassifier(
-            LogisticRegression(
-                C=c,
-                solver="liblinear",
-                multi_class="ovr",
-            ),
-            n_jobs=-1,
-        )
-        clf.fit(x_train, y_train)
-        y_score = clf.predict_proba(x_test)
-        y_pred = construct_indicator(y_score, y_test)
-        mi = f1_score(y_test, y_pred, average="micro")
-        ma = f1_score(y_test, y_pred, average="macro")
-        try:
-            roc_auc = roc_auc_score(y_test, y_score)
-        except ValueError:
-            logger.warning('Problem with roc_auc_score')
+
+        micro_f1, macro_f1, roc_auc = predict(x_train, x_test, y_train, y_test, c=c)
+        if micro_f1 is None:
             continue
 
-        logger.debug("micro f1 %.3f, macro f1 %.3f, roc-auc %.3f", mi, ma, roc_auc)
+        logger.debug("micro f1 %.3f, macro f1 %.3f, roc-auc %.3f", micro_f1, macro_f1, roc_auc)
         results.append(dict(
-            micro_f1=mi,
-            macro_f1=ma,
+            micro_f1=micro_f1,
+            macro_f1=macro_f1,
             roc_auc=roc_auc,
         ))
 
     return results
+
 
 
 def _get_embedding(embedding):

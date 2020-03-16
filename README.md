@@ -14,12 +14,12 @@ This is a Python implementation of NetMF for the task of network embedding learn
 ## Programmatic Usage
 
 ```python
-from netmf import netmf_large, predict_cv, load_label
+from netmf import netmf_large_mat, predict_cv, load_label
 
 # Assuming .mat file is set up in the standard way
-embedding = netmf_large(matfile='Homo_sapiens.mat')
-label = load_label(matfile='Homo_sapiens.mat')
-results = predict_cv(x=embedding, y=label)
+embeddings = netmf_large_mat('Homo_sapiens.mat')
+labels = load_label('Homo_sapiens.mat')
+results = predict_cv(x=embeddings, y=labels)
 ```
 
 ## CLI Usage
